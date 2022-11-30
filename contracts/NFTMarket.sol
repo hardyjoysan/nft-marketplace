@@ -89,5 +89,11 @@ contract NFTMarket is ReentrancyGuard {
       msg.value == price,
       "Please submit the asking price to complete the purchase."
     );
+
+    idToMarketItem[itemId].seller.transfer(msg.value);
+    IERC721(nftContract).transferFrom(address(this), msg.sender, tokenId);
+    idToMarketItem[itemId].sold = true;
+    _itemsSold.increment();
+    payable(owner).transfer(listingPrice);
   }
 }
