@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
+// Uncomment this line to use console.log
+import "hardhat/console.sol";
+
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -92,6 +95,7 @@ contract NFTMarket is ReentrancyGuard {
 
     idToMarketItem[itemId].seller.transfer(msg.value);
     IERC721(nftContract).transferFrom(address(this), msg.sender, tokenId);
+    idToMarketItem[itemId].owner = payable(msg.sender);
     idToMarketItem[itemId].sold = true;
     _itemsSold.increment();
     payable(owner).transfer(listingPrice);
@@ -99,7 +103,7 @@ contract NFTMarket is ReentrancyGuard {
 
   function fetchMarketItems() public view returns (MarketItem[] memory) {
     uint256 itemCount = _itemIds.current();
-    uint256 unsoldItemCount = _itemIds.current() - _itemsSold.current();
+    uint256 unsoldItemCount = (_itemIds.current() - _itemsSold.current());
     uint256 currentIndex = 0;
 
     MarketItem[] memory items = new MarketItem[](unsoldItemCount);
