@@ -59,3 +59,4 @@ cache
 artifacts
 
 .secret
+config.js
