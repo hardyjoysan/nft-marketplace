@@ -1,9 +1,94 @@
+import { useState } from "react";
 import { ethers } from "ethers";
 import { create as ipfsHttpClient } from "ipfs-http-client";
 import { useRouter } from "next/router";
 import Web3Modal from "web3modal";
 
+const client = ipfsHttpClient({ url: "http://127.0.0.1:5001/" });
+import { nftaddress, nftmarketaddress } from "../config";
+import NFT from "../artifacts/contracts/NFT.sol/NFT.json";
+import Market from "../artifacts/contracts/NFTMarket.sol/NFTMarket.json";
+
 export default function CreateNFT() {
+  const [fileUrl, setFileUrl] = useState(null);
+  const [formInput, updateFormInput] = useState({
+    price: "",
+    name: "",
+    description: "",
+  });
+  const router = useRouter();
+
+  async function onUploadImage(e) {
+    const file = e.target.files[0];
+    try {
+      const added = await client.add(file, {
+        progress: (prog) => console.log(`received: ${prog}`),
+      });
+      const url = `http://127.0.0.1:8080/ipfs/${added.path}`;
+      console.log(url);
+      setFileUrl(url);
+    } catch (error) {
+      console.log("Error uploading file: ", error);
+    }
+  }
+
+  async function uploadToIPFS() {
+    const { name, description, price } = formInput;
+    if (!name || !description || !price || !fileUrl) return;
+    /* first, upload to IPFS */
+    const data = JSON.stringify({
+      name,
+      description,
+      image: fileUrl,
+    });
+    try {
+      const added = await client.add(data);
+      const url = `http://127.0.0.1:8080/ipfs/${added.path}`;
+      /* after file is uploaded to IPFS, return the URL to use it in the transaction */
+      return url;
+    } catch (error) {
+      console.log("Error uploading file: ", error);
+    }
+  }
+
+  async function listNFTForSale() {
+    const url = await uploadToIPFS();
+    const web3Modal = new Web3Modal();
+    const connection = await web3Modal.connect();
+    const provider = new ethers.providers.Web3Provider(connection);
+    const signer = provider.getSigner();
+
+    /* next, create the item */
+    let NFTcontract = new ethers.Contract(nftaddress, NFT.abi, signer);
+    let transaction = await NFTcontract.createToken(url);
+    let tx = await transaction.wait();
+
+    let event = tx.events[0];
+    let value = event.args[2];
+    let tokenId = value.toNumber();
+
+    const price = ethers.utils.parseUnits(formInput.price, "ether");
+
+    const MarketContract = new ethers.Contract(
+      nftmarketaddress,
+      Market.abi,
+      signer
+    );
+    let listingPrice = await MarketContract.getListingPrice();
+    listingPrice = listingPrice.toString();
+
+    transaction = await MarketContract.createMarketItem(
+      nftaddress,
+      tokenId,
+      price,
+      { value: listingPrice }
+    );
+
+    await transaction.wait();
+
+    router.push("/");
+  }
+
   return (
     <div className="flex justify-center">
       <div className="w-1/2 flex flex-col pb-12">
@@ -28,7 +113,12 @@ export default function CreateNFT() {
             updateFormInput({ ...formInput, price: e.target.value })
           }
         />
-        <input type="file" name="Asset" className="my-4" onChange={onChange} />
+        <input
+          type="file"
+          name="Asset"
+          className="my-4"
+          onChange={onUploadImage}
+        />
         {fileUrl && <img className="rounded mt-4" width="350" src={fileUrl} />}
         <button
           onClick={listNFTForSale}
